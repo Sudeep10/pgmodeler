@@ -1,10 +1,10 @@
-name: Linux build
+name: Linux build (CMake)
 
 on:
   push:
     branches: [ main, develop, 1.* ]
-    tags: 1.*
-    
+    tags: [ 1.* ]
+
   pull_request:
     branches: [ main, develop, 1.* ]
 
@@ -19,18 +19,41 @@ jobs:
         qt: ['6.4.3', '6.5.3', '6.6.3', '6.7.3', '6.8.0']
 
     steps:
-    - uses: actions/checkout@v2
-      
-    - name: Installing Qt framework
-      uses: jurplel/install-qt-action@v3
-      with:
-        version: ${{ matrix.qt }}      
+      - name: Checkout source
+        uses: actions/checkout@v4
 
-    - name: Running qmake
-      run:  cd $GITHUB_WORKSPACE; qmake pgmodeler.pro -r PREFIX=$GITHUB_WORKSPACE/build CONFIG+=debug
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: ${{ matrix.qt }}
+          modules: 'qtbase qttools qt5compat'
 
-    - name: Building pgModeler
-      run: make -j6
-     
-    - name: Deploying pgModeler
-      run: make install
+      - name: Install system dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            build-essential \
+            cmake \
+            libpq-dev \
+            postgresql-server-dev-all
+
+      - name: Configure CMake
+        run: |
+          cmake -S . -B cmake-build \
+            -DCMAKE_PREFIX_PATH=$Qt6_DIR \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DPGM_PREFIX=$GITHUB_WORKSPACE/build
+
+      - name: Build
+        run: |
+          cmake --build cmake-build --parallel
+
+      - name: Install
+        run: |
+          cmake --install cmake-build
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: pgmodeler-${{ matrix.qt }}
+          path: build/
